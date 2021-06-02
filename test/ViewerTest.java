@@ -1,5 +1,6 @@
 import org.assertj.swing.fixture.JButtonFixture;
 import org.assertj.swing.fixture.JComboBoxFixture;
+import org.assertj.swing.fixture.JTableFixture;
 import org.assertj.swing.fixture.JTextComponentFixture;
 import org.hyperskill.hstest.dynamic.DynamicTest;
 import org.hyperskill.hstest.exception.outcomes.WrongAnswer;
@@ -14,6 +15,9 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.Locale;
 
 import static org.hyperskill.hstest.testcase.CheckResult.correct;
@@ -38,7 +42,10 @@ public class ViewerTest extends SwingTest {
     private JTextComponentFixture queryTextArea;
 
     @SwingComponent(name = "ExecuteQueryButton")
-    private JButtonFixture executeQueryButton;
+    private JButtonFixture queryButton;
+
+    @SwingComponent(name = "Table")
+    private JTableFixture table;
 
     private static final String firstDatabaseFileName = "firstDatabase.db";
     private static final String secondDatabaseFileName = "secondDatabase.db";
@@ -61,6 +68,12 @@ public class ViewerTest extends SwingTest {
         requireEnabled(queryTextArea);
         requireEditable(queryTextArea);
         requireEmpty(queryTextArea);
+
+        requireEnabled(queryButton);
+        requireVisible(queryButton);
+
+        requireVisible(table);
+        requireEnabled(table);
 
         return correct();
     }
@@ -146,6 +159,68 @@ public class ViewerTest extends SwingTest {
         return correct();
     }
 
+    @DynamicTest(order = 5)
+    CheckResult testDataInTable() {
+
+        fileNameTextField.deleteText().setText(firstDatabaseFileName);
+        openFileButton.click();
+
+        if (tablesComboBox.contents().length != 2) {
+            return wrong("Wrong number of items of 'TablesComboBox' combo box.\n" +
+                "Expected 2 tables\n" +
+                "Found " + tablesComboBox.contents().length);
+        }
+
+        List<String> tables = Arrays.asList(tablesComboBox.contents());
+
+        if (!tables.contains("contacts")) {
+            return wrong("Can't find contacts table in the 'TablesComboBox' combo box.");
+        }
+
+        tablesComboBox.selectItem("contacts");
+
+        if (!queryTextArea.text().toLowerCase(Locale.ROOT).equals("select * from contacts;")) {
+            return wrong("Wrong query in the 'QueryTextArea'. There should be query to select all rows from the selected table!\n" +
+                "Expected query: " + "SELECT * FROM contacts;\n" +
+                "    Your query: " + queryTextArea.text());
+        }
+
+        queryButton.click();
+
+        return correct();
+    }
+
+    @DynamicTest(order = 6, feedback = "Expected 5 columns and 3 rows in the table!")
+    CheckResult checkTableNumbers() {
+        table.requireColumnCount(5);
+        table.requireRowCount(3);
+        return correct();
+    }
+
+    @DynamicTest(order = 7)
+    CheckResult checkTableContent() {
+
+        String[][] rows = table.contents();
+        int firstNameColumnIndex;
+        try {
+            firstNameColumnIndex = table.columnIndexFor("first_name");
+        } catch (Exception ignored) {
+            return wrong("Can't find 'first_name' column in the table!");
+        }
+
+        List<String> correctNames = new ArrayList<>(Arrays.asList("Sharmin", "Fred", "Emeli"));
+
+        for (String[] row : rows) {
+            correctNames.remove(row[firstNameColumnIndex]);
+        }
+
+        if (correctNames.size() != 0) {
+            return wrong("Can't find the following first names in the table:\n" + correctNames.toString());
+        }
+
+        return correct();
+    }
+
     private static void initDatabase() throws SQLException {
 
         deleteDatabaseFiles();
@@ -163,6 +238,12 @@ public class ViewerTest extends SwingTest {
             "   group_id INTEGER PRIMARY KEY,\n" +
             "   name TEXT NOT NULL\n" +
             ");");
+
+        statement.execute("DELETE FROM contacts");
+        statement.execute("INSERT INTO contacts VALUES(1, 'Sharmin', 'Pittman', 'sharmin@gmail.com', '202-555-0140')");
+        statement.execute("INSERT INTO contacts VALUES(2, 'Fred', 'Hood', 'fred@gmail.com', '202-555-0175')");
+        statement.execute("INSERT INTO contacts VALUES(3, 'Emeli', 'Ortega', 'emeli@gmail.com', '202-555-0138')");
+
         connection.close();
 
         connection = DriverManager.getConnection("jdbc:sqlite:" + secondDatabaseFileName);
