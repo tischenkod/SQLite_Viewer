@@ -7,6 +7,7 @@ import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ItemEvent;
+import java.io.File;
 import java.sql.*;
 
 public class SQLiteViewer extends JFrame {
@@ -14,6 +15,7 @@ public class SQLiteViewer extends JFrame {
     private final JComboBox<String> tablesComboBox;
     private final JTextArea queryTextArea;
     JTable table;
+    JButton executeQueryButton;
 
     SQLiteDataSource dataSource;
 
@@ -43,54 +45,50 @@ public class SQLiteViewer extends JFrame {
         tablesComboBox.setName("TablesComboBox");
         tablesComboBox.setPreferredSize(new Dimension(655, 20));
         tablesComboBox.addItemListener(this::tableChange);
+//        tablesComboBox.setEnabled(false);
         add(tablesComboBox);
 
         queryTextArea = new JTextArea();
         queryTextArea.setName("QueryTextArea");
         queryTextArea.setPreferredSize(new Dimension(560, 250));
+        queryTextArea.setEnabled(false);
         add(queryTextArea);
 
-        JButton executeQueryButton = new JButton("Execute");
+        executeQueryButton = new JButton("Execute");
         executeQueryButton.setName("ExecuteQueryButton");
         executeQueryButton.setPreferredSize(new Dimension(80, 30));
         executeQueryButton.addActionListener(this::executeQuery);
+        executeQueryButton.setEnabled(false);
         add(executeQueryButton);
 
         table = new JTable();
         table.setName("Table");
         JScrollPane scrollPain = new JScrollPane(table);
+        scrollPain.setPreferredSize(new Dimension(655, 500));
         add(scrollPain);
 
         setVisible(true);
-    }
-
-    public void updateTable(ResultSet resultSet) {
-        try {
-            DefaultTableModel model = new DefaultTableModel();
-            ResultSetMetaData metaData = resultSet.getMetaData();
-            for (int i = 0; i < metaData.getColumnCount(); i++) {
-                model.addColumn(metaData.getColumnName(i + 1));
-            }
-            while (resultSet.next()) {
-                Object[] row = new Object[resultSet.getMetaData().getColumnCount()];
-                for (int i = 0; i < row.length; i++) {
-                    row[i] = resultSet.getObject(i + 1);
-                }
-                model.addRow(row);
-            }
-            table.setModel(model);
-        } catch (SQLException exception) {
-            exception.printStackTrace();
-        }
     }
 
     private void executeQuery(ActionEvent event) {
         try (Connection connection = dataSource.getConnection()){
             Statement statement = connection.createStatement();
             ResultSet rows = statement.executeQuery(queryTextArea.getText());
-            updateTable(rows);
+            DefaultTableModel model = new DefaultTableModel();
+            ResultSetMetaData metaData = rows.getMetaData();
+            for (int i = 0; i < metaData.getColumnCount(); i++) {
+                model.addColumn(metaData.getColumnName(i + 1));
+            }
+            while (rows.next()) {
+                Object[] row = new Object[rows.getMetaData().getColumnCount()];
+                for (int i = 0; i < row.length; i++) {
+                    row[i] = rows.getObject(i + 1);
+                }
+                model.addRow(row);
+            }
+            table.setModel(model);
         } catch (SQLException exception) {
-            exception.printStackTrace();
+            JOptionPane.showMessageDialog(new Frame(), exception.getMessage());
         }
     }
 
@@ -101,6 +99,10 @@ public class SQLiteViewer extends JFrame {
     }
 
     private void openDatabase(ActionEvent actionEvent) {
+        if (! new File(fileNameTextField.getText().trim()).exists()) {
+            fileNotFound();
+            return;
+        }
         dataSource.setUrl("jdbc:sqlite:" + fileNameTextField.getText().trim());
         try (Connection connection = dataSource.getConnection()){
             Statement statement = connection.createStatement();
@@ -110,8 +112,18 @@ public class SQLiteViewer extends JFrame {
             while (tables.next()) {
                 tablesComboBox.addItem(tables.getString(1));
             }
+            tablesComboBox.setEnabled(true);
+            queryTextArea.setEnabled(true);
+            executeQueryButton.setEnabled(true);
         } catch (SQLException exception) {
-            exception.printStackTrace();
+            fileNotFound();
         }
+    }
+
+    private void fileNotFound() {
+        JOptionPane.showMessageDialog(new Frame(), "Wrong file name!");
+        tablesComboBox.setEnabled(false);
+        queryTextArea.setEnabled(false);
+        executeQueryButton.setEnabled(false);
     }
 }
